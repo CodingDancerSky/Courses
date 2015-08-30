@@ -1,0 +1,27 @@
+library(e1071)
+
+weka_label_result = training[,42]
+weka_training_data = training[,1:41]
+
+navie_bayes_tree_model =
+naiveBayes(as.factor(weka_label_result)~.,weka_training_data)
+
+navie_bayes_pred = predict(navie_bayes_tree_model,testdata)
+golden_answer = corrected[,42]
+navie_bayes_pred = factor(navie_bayes_pred, levels =levels(golden_answer))
+mean(golden_answer == navie_bayes_pred,na.rm = TRUE)
+table(golden_answer,navie_bayes_pred)
+
+
+weka_label_result = training[,42]
+weka_training_data = training[,1:41]
+
+weka_tree_model = J48(as.factor(weka_label_result)~.,weka_training_data)
+e = predict(weka_tree_model, newdata = testdata)
+
+golden_answer = corrected[,42]
+tree_predict = e
+golden_answer = factor(golden_answer, levels =levels(tree_predict))
+mean(golden_answer == tree_predict,na.rm = TRUE)
+summary(tree_predict)
+summary(golden_answer)
