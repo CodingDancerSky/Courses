@@ -1,0 +1,318 @@
+
+#KDD Cup Project
+
+Xiangzhu Long (xiangzhl)
+
+## Introduction
+During the last decase, the attack in the network has attracted the attention of many researchers. To prevent these unfriendly visitors, we need to build a network intrusion detector, which can distinguish the ''bad'' connections, and ''good'' connections.
+
+
+## Dataset
+This database([KDD Cup 1999 Data](http://archive.ics.uci.edu/ml/machine-learning-databases/kddcup99-mld/kddcup99.html)) contains a standard set of data to be audited, which includes a wide variety of intrusions simulated in a military network environment.
+
+Attacks fall into four main categories:
+
+| Variable | Description | Example
+-----------|-------------|-------------
+| DOS | denial-of-service | syn flood
+| R2L | unauthorized access from a remote machine | guessing password
+| U2R | unauthorized access to local superuser privileges | ''buffer overflow'' attacks
+| probing | surveillance and other probing | port scanning
+ 
+## Methods
+  1. Build different models by using 10% training data;
+  2. Compare the results of these models;
+  3. Analysis the first-step result;
+  4. Make feature engineering;
+  5. Build new model by using prepocessed features and optimal algorithm on full training dataset;
+  6. Analysis the result.
+
+
+## Prediction
+### Loading and preprocessing the 10% training data
+```{r, results = 'asis', echo = TRUE}
+# Clear the workspace
+rm( list = ls() )
+
+# Load the data 
+train_raw <- read.csv("data/traindata_10percent.csv", stringsAsFactors = FALSE)
+
+# Process the data
+colnames <- read.table("data/names", skip = 1, sep = ":")
+names(train_raw) <- colnames$V1
+d <- dim(train_raw)
+names(train_raw)[d[2]] <- "label"
+
+# Observe the data
+names(train_raw)
+```
+
+We can see the 10% kddcup training data has `r d[1]` observations, each data has `r d[2] - 1` features and the last one is its label.
+
+```{r, results = 'asis', echo = TRUE}
+# Observe the distribution of labels. 
+sum_label <- aggregate(rep(1, d[1]), 
+                       by = list(train_raw$label), 
+                       FUN = sum)
+names(sum_label) <- c("label", "count")
+barplot(beside = TRUE, log10(sum_label$count), 
+        names.arg = sum_label$label, ylim = c(0,6),
+        xlab = "Label", ylab = "log(Count)",
+        col = "Blue", main = "The distribution of labels")
+```
+
+```{r, results = 'hide', echo = TRUE}
+# Select the features 
+library(caret)
+```
+
+```{r}
+# Process the feature with NA value.
+l <- train_raw$label
+sum(is.na(l))
+```
+
+There is no NA value, which makes our work more simple.
+
+```{r}
+# Clean up near zero variance features
+nzvcol <- nearZeroVar(train_raw)
+train_raw <- train_raw[, -nzvcol]
+
+#label into factor
+training <- train_raw
+training$label <- factor(training$label)
+
+d <- dim(training)
+```
+After preprocessing, the 10% training data has `r d[1]` observations and `r d[2]` features.
+
+### Loading and preprocessing the 10% testing data
+
+```{r}
+# Load the data 
+test_raw <- read.csv("data/testdata_10percent.csv", stringsAsFactors = FALSE)
+
+# Process the data
+names(test_raw) <- colnames$V1
+names(test_raw)[dim(test_raw)[2]] <- "label"
+
+# Extract the same features as training data
+colnames_train <- names(training)
+test_raw <- test_raw[ , colnames_train]
+
+testing <- test_raw
+testing$label <- as.factor(testing$label)
+```
+
+### Building the model by using the Naive Bayes.
+
+```{r, results = 'hide', echo = TRUE}
+library(e1071)
+
+# Build the model
+label_result = training[ ,d[2]]
+training_data = training[ ,1:(d[2]-1)]
+navie_bayes_tree_model = naiveBayes(as.factor(label_result)~.,
+                                    training_data)
+
+# Predict the testing
+testing_data = testing[ , 1: (d[2]-1)]
+navie_bayes_pred = predict(navie_bayes_tree_model, testing_data)
+golden_answer = testing[ , d[2]]
+navie_bayes_pred = factor(navie_bayes_pred, levels =levels(golden_answer))
+
+# Get the accuracy
+NB_accuracy <- mean(golden_answer == navie_bayes_pred,na.rm = TRUE)
+```
+The accuracy of Naive Bayes is `r NB_accuracy`.
+
+### Building the model by using other algorithms.
+
+```{r, results = 'hide', echo = TRUE, eval = FALSE}
+# Random Forest
+library(randomForest)
+library(doParallel)
+
+#random seed
+set.seed(3433)
+#parallel computing for multi-core
+registerDoParallel(makeCluster(detectCores()))
+
+model_rf <- train(label ~ .,  method = "rf", data = training)
+
+# Decesion Tree
+library(rpart)
+decision_tree_model <- rpart(label ~ ., data = training, method = "class")
+
+# Predicting:
+decision_tree_pred <- predict(decision_tree_model, testing_data, type = "class")
+
+# Plot of the Decision Tree
+rpart.plot(decision_tree_model, main = "Classification Tree", 
+           extra = 102, under = TRUE, faclen = 0)
+
+# Test results on our subTesting data set:
+confusionMatrix(prediction1, subTesting$classe)
+```
+
+Actually, it was running without stop. Thus, there is no successful model.
+
+
+## Analysis the outcome
+After make deeper observation and then refer to the article [A Detailed Analysis of the KDD CUP 99 Data Set](http://www.ee.ryerson.ca/~bagheri/papers/cisda.pdf), 
+There exists two issues in the "KDD CUP 99 Data Set":
+
+1.There are huge number of redundant records.
+
+2.The prediction accuracy is unbelievably high.
+
+
+```{r}
+# Redundant records in training set
+d_train <- dim(train_raw)
+d_uniqe_train <- dim(unique(train_raw))
+d_train_percent <- (d_train[1] - d_uniqe_train[1]) / d_train[1]
+```
+In the 10 percent of training dataset, there are `r d_train[1]` observations, but the number of distinct observations are `r d_uniqe_train[1]`, which means there are `r d_train_percent` redundant observations.
+
+```{r}
+# Redundant records in testing set
+d_test <- dim(test_raw)
+d_uniqe_test <- dim(unique(test_raw))
+d_test_percent <- (d_test[1] - d_uniqe_test[1]) / d_test[1]
+```
+In the 10 percent of testing dataset, there are `r d_test[1]` observations, but the number of distinct observations are `r d_uniqe_test[1]`, which means there are `r d_test_percent` redundant observations.
+
+
+## Build the naive bayes on full training dataset.
+
+### Loading and preprocessing the full training data
+```{r, results = 'asis', echo = TRUE}
+# Clear the workspace
+rm( list = ls() )
+
+# Load the data 
+train_raw <- read.csv("data/traindata_full.csv", stringsAsFactors = FALSE)
+
+# Process the data
+colnames <- read.table("data/names", skip = 1, sep = ":")
+names(train_raw) <- colnames$V1
+d <- dim(train_raw)
+names(train_raw)[d[2]] <- "label"
+```
+
+We can see the full kddcup training data has `r d[1]` observations.
+
+
+```{r, results = 'asis', echo = TRUE}
+# Observe the distribution of labels. 
+sum_label <- aggregate(rep(1, d[1]), 
+                       by = list(train_raw$label), 
+                       FUN = sum)
+names(sum_label) <- c("label", "count")
+barplot(beside = TRUE, log10(sum_label$count), 
+        names.arg = sum_label$label, ylim = c(0,6),
+        xlab = "Label", ylab = "log(Count)",
+        col = "Blue", main = "The distribution of labels")
+```
+
+### Feature Engineering
+```{r, results = 'asis', echo = TRUE}
+library(caret)
+
+# Clean up near zero variance features
+nzvcol <- nearZeroVar(train_raw)
+train_raw <- train_raw[, -nzvcol]
+
+# Delete the duplicate data in the training set.
+training_engineer <- unique(train_raw)
+
+d_unique <- dim(training_engineer)
+d_percent <- (d[1] - d_unique[1]) / d[1]
+```
+After removing the duplicate data, the new training dataset contains `r d_unique[1]` observations, which means there are `r d_percent` duplicate training data.
+
+```{r}
+d <- d_unique
+
+# Make numeralization.
+numeralize <- function(col) {
+  # Find the classification of this column.
+  char <- unique(col)
+  
+  # Change the type to its corresponding type.
+  for (i in 1: length(char)) { 
+      col <- replace(col, col == char[i], i)
+    }
+  
+  col
+}
+
+# Precess these colums with character class.
+training_engineer <- within(training_engineer, { 
+  protocol_type <- numeralize(protocol_type) 
+  service <- numeralize(service)
+  flag <- numeralize(flag)
+  label <- numeralize(label)
+  } ) 
+
+summary(training_engineer)
+```
+The new training dataset contains `r d[1]` observations and every column is numeric class.
+
+### Loading and preprocessing the testing data
+
+```{r}
+# Load the data 
+test_raw <- read.csv("data/testdata_10percent.csv", stringsAsFactors = FALSE)
+
+# Process the data
+names(test_raw) <- colnames$V1
+names(test_raw)[dim(test_raw)[2]] <- "label"
+
+# Extract the same features as training data
+colnames_train <- names(training_engineer)
+test_raw <- test_raw[ , colnames_train]
+
+# Implement the numeralization feature engineering on testing dataset.
+# Note: we could not delete the duplicate data in testing set.
+testing_engineer <- within(test_raw, { 
+  protocol_type <- numeralize(protocol_type) 
+  service <- numeralize(service)
+  flag <- numeralize(flag)
+  label <- numeralize(label)
+  } ) 
+```
+
+
+
+### Build the model and make prediction.
+```{r}
+# Build the model
+label_result = training_engineer[ ,d[2]]
+training_data = training_engineer[ ,1:(d[2]-1)]
+navie_bayes_tree_model = naiveBayes(label_result~.,
+                                    training_data)
+
+# Predict the testing
+testing_data = testing_engineer[, 1: (d[2]-1)]
+navie_bayes_pred = predict(navie_bayes_tree_model, testing_data)
+golden_answer = testing_engineer[, d[2]]
+navie_bayes_pred = factor(navie_bayes_pred, levels =levels(golden_answer))
+
+# Get the accuracy
+NB_accuracy <- mean(golden_answer == navie_bayes_pred,na.rm = FALSE)
+```
+The accuracy is 91.6%, which is pretty optimal.
+
+
+## Future Work
+There is still lots more to work on.
+
+1.Implement cross validation to make better prediction of data.
+
+2.Take the prediction and call into consideration to better evaluate the model.
+
+
+
