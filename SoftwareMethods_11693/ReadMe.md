@@ -4,4 +4,4 @@ Understand software development process by working on several mini projects on d
 
 Software Development Process:
 
-Requirements -> Design -> Implementation -> Verification -> Maintainance
+Requirements -> Design -> Implementation -> Verification -> Maintenance
